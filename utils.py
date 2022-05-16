@@ -224,3 +224,108 @@ def match_legs(img, fixed_points, rotate_matrix, rd_low, rd_high):
     src_pts = np.vstack((conv_rotated_pts,np.float32([[center_x,center_y]])))
     dst_pts = np.vstack((conv_fixed_pts,np.float32([[center_x+rd,center_y]])))
     return warp_image_cv(img, src_pts, dst_pts)
+
+def pointwise_distance(pts1, pts2):
+    """Calculates the distance between pairs of points
+
+    Args:
+        pts1 (np.ndarray): array of form [[x1, y1], [x2, y2], ...]
+        pts2 (np.ndarray): array of form [[x1, y1], [x2, y2], ...]
+
+    Returns:
+        np.array: distances between corresponding points
+    """
+    dist = np.sqrt(np.sum((pts1 - pts2)**2, axis=1))
+    return dist
+
+def order_points(pts):
+    """Orders points in form [top left, top right, bottom right, bottom left].
+    Source: https://www.pyimagesearch.com/2016/03/21/ordering-coordinates-clockwise-with-python-and-opencv/
+
+    Args:
+        pts (np.ndarray): list of points of form [[x1, y1], [x2, y2], [x3, y3], [x4, y4]]
+
+    Returns:
+        [type]: [description]
+    """
+    # sort the points based on their x-coordinates
+    x_sorted = pts[np.argsort(pts[:, 0]), :]
+
+    # grab the left-most and right-most points from the sorted
+    # x-roodinate points
+    left_most = x_sorted[:2, :]
+    right_most = x_sorted[2:, :]
+
+    # now, sort the left-most coordinates according to their
+    # y-coordinates so we can grab the top-left and bottom-left
+    # points, respectively
+    left_most = left_most[np.argsort(left_most[:, 1]), :]
+    tl, bl = left_most
+
+    # now that we have the top-left coordinate, use it as an
+    # anchor to calculate the Euclidean distance between the
+    # top-left and right-most points; by the Pythagorean
+    # theorem, the point with the largest distance will be
+    # our bottom-right point. Note: this is a valid assumption because
+    # we are dealing with rectangles only.
+    # We need to use this instead of just using min/max to handle the case where
+    # there are points that have the same x or y value.
+    D = pointwise_distance(np.vstack([tl, tl]), right_most)
+    
+    br, tr = right_most[np.argsort(D)[::-1], :]
+
+    # return the coordinates in top-left, top-right,
+    # bottom-right, and bottom-left order
+    return np.array([tl, tr, br, bl], dtype="float32")
+
+def create_grad_img_ellipse(img, center, axesLength, angle, startAngle, endAngle, 
+                            thickness=2, speed=1, overflow=1.1, offset = 40):
+    """
+    speed: how fast the shadow fades
+    offset: lessen the "blackness" of the shadow
+    overflow: how much bigger the shadow should be compared to the original (in %)
+    """
+    grad_img = np.zeros_like(img)
+    it = int(overflow*(axesLength[0]-axesLength[1]))
+    for i in range(1,it):
+        color_weight = np.exp(-speed*i/it)
+        color = 255-int(i/it*255)
+        color*=color_weight
+        color-=offset
+        axesLength_i = np.array([axesLength[0]-axesLength[1]+i, i],dtype='int')
+        grad_img = cv2.ellipse(grad_img, center, axesLength_i,
+           angle, startAngle, endAngle, (color,color,color), thickness)
+    return grad_img
+
+# TODO: add random
+def create_ellipse_alpha_mask(org_mask, rd_low, rd_high, is_vertical_flip):
+    rd = np.random.randint(low = rd_low, high = rd_high)
+    shadow_img = np.copy(org_mask)
+    # shadow_img = np.zeros_like(org_mask)
+    center_x = (min(fixed_points[0,:,0]) + max(fixed_points[0,:,0]))/2
+    center_y = (min(fixed_points[0,:,1]) + max(fixed_points[0,:,1]))/2
+    center_coordinates = np.array([center_x, center_y]).astype('int')
+
+    tl, tr, br, bl = order_points(fixed_points[0])
+    mid_l = (tl+bl)/2
+    mid_r = (tr+br)/2
+    mid_t = (tl+tr)/2
+    mid_b = (bl+br)/2
+    d_lr = pointwise_distance(np.expand_dims(mid_l,0), np.expand_dims(mid_r,0))[0]
+    d_tb = pointwise_distance(np.expand_dims(mid_t,0), np.expand_dims(mid_b,0))[0]
+    axesLength = np.sort([d_lr, d_tb])[::-1].astype('int')
+
+    angle = np.arctan((mid_r-mid_l)[1]/(mid_r-mid_l)[0])*180/np.pi
+    startAngle = 0  
+    endAngle = 360
+
+    color = (255,255,255)
+    thickness = 5
+
+    grad_img = create_grad_img_ellipse(org_mask, center_coordinates, axesLength, 
+                                   angle, startAngle, endAngle, speed=0.1, 
+                                   overflow=1.2, offset = 90)
+    
+    # Normalize the alpha mask to keep intensity between 0 and 1
+    alpha = grad_img.astype(float)/255
+    return alpha
