@@ -6,14 +6,6 @@ import json
 from PIL import Image
 import thinplate as tps
 
-#large radius => brighter around center. Too small radius would cut the image
-def create_grad_img(org_img, center, radius, thickness = 2, speed=1):
-    grad_img = np.zeros_like(org_img, dtype='uint8')
-    for i in range(1,radius):
-        color = 255-int(speed*i/radius*255)
-        grad_img = cv2.circle(grad_img, center, i, (color, color, color), thickness)
-    return grad_img
-
 def get_rotate_matrix(h, w, alpha, beta, gamma, dx, dy, dz, f):
     """
     ONLY WORK WITH SQUARE MATRIX
@@ -82,54 +74,76 @@ def get_mask_bbox(img):
     b = last_nonzero(sum_x, 0)[0]
     return (l, r, t, b)
 
-# TODO: bug if there is more than 1 object in the mask
-def mask_to_shadow(mask, rot_rd_low, rot_rd_high, is_vertical_flip = False, match_legs=False):
-    # Rotate image
-    h, w = mask.shape[0], mask.shape[1]
-    rot_rd = np.random.randint(low = rot_rd_low, high = rot_rd_high)
-    rotate_matrix = get_rotate_matrix(h, w, alpha=90+rot_rd, beta=90, gamma=90, dx=0, dy=0, dz=200, f=200)
-    rotated = cv2.warpPerspective(mask, rotate_matrix, (h, w), cv2.INTER_LANCZOS4)
+# # TODO: bug if there is more than 1 object in the mask
+# def mask_to_shadow(mask, fixed_points, rot_rd_low, rot_rd_high, is_vertical_flip = False, match_legs=False):
+#     center_x = (min(fixed_points[0,:,0]) + max(fixed_points[0,:,0]))/2
+#     center_y = (min(fixed_points[0,:,1]) + max(fixed_points[0,:,1]))/2
+#     center_coordinates = np.array([center_x, center_y]).astype('int')
+
+#     tl, tr, br, bl = order_points(fixed_points[0])
+#     mid_l = (tl+bl)/2
+#     mid_r = (tr+br)/2
+#     angle = np.arctan((mid_r-mid_l)[1]/(mid_r-mid_l)[0])*180/np.pi
+
+#     # Rotate image
+#     h, w = mask.shape[0], mask.shape[1]
+#     rot_rd = np.random.randint(low = rot_rd_low, high = rot_rd_high)
+#     rotate_matrix = get_rotate_matrix(h, w, alpha=90+rot_rd, beta=90, gamma=90+angle, dx=0, dy=0, dz=200, f=200)
+#     rotated = cv2.warpPerspective(mask, rotate_matrix, (h, w), cv2.INTER_LANCZOS4)
     
-    # Translate image so the shadow touch the legs
-    # Translate after rotate x-axis or it won't be correct
-    if not match_legs:
-        # Affine transform
-        rd = np.random.randint(low = -h//4, high = h//4, size=2)
-        srcTri = np.array( [[0,0], [w-1,0], [w//2, h//2]]).astype(np.float32)
-        dstTri = np.array( [[0,0], [w-1,0], [w//2+rd[0], h//2+rd[1]]]).astype(np.float32)
-        warp_mat = cv2.getAffineTransform(srcTri, dstTri)
-        warp_dst = cv2.warpAffine(rotated, warp_mat, (w, h))
-        
-        # Matching shadow
-        l, r, t, b = get_mask_bbox(mask)
-        new_l, new_r, new_t, new_b = get_mask_bbox(warp_dst)
-        # matching the x-axis center of 2 bboxes
-        dx=int(l+(r-l)/2-new_l-(new_r-new_l)/2)
+#     # Translate image so the shadow touch the legs
+#     # Translate after rotate x-axis or it won't be correct
+#     if not match_legs:
+#         # Affine transform
+#         rd = np.random.randint(low = -h//4, high = h//4, size=2)
+#         srcTri = np.array( [[0,0], [w-1,0], [w//2, h//2]]).astype(np.float32)
+#         dstTri = np.array( [[0,0], [w-1,0], [w//2+rd[0], h//2+rd[1]]]).astype(np.float32)
+#         warp_mat = cv2.getAffineTransform(srcTri, dstTri)
+#         warp_dst = cv2.warpAffine(rotated, warp_mat, (w, h))
 
-        # Flip shadow
-        if not is_vertical_flip:
-            # matching the bottom of 2 bboxes
-            dy=int(b-new_b)
-        else:
-            warp_dst = cv2.flip(warp_dst, 0)
-            # matching the bottom of original src with the top of dst bbox 
-            t_after_flip = h-new_b
-            b_after_flip = h-new_t
-            delta = h/20 #hard-code, make the shadow connect more with the object
-            dy=int(b-t_after_flip-delta)
-            # dy=int(t+(t-b)/2-t_after_flip-(t_after_flip-b_after_flip)/2)
-        trans_matrix = get_rotate_matrix(h, w, alpha=90, beta=90, gamma=90,
-                                         dx=dx, dy=dy, dz=200, f=200)
-        warped = cv2.warpPerspective(warp_dst, trans_matrix, (h, w), cv2.INTER_LANCZOS4)
-        
-        warp_matrix = np.zeros_like(rotate_matrix)
-        warp_matrix[2,2] = 1
-        warp_matrix[:2] = warp_mat
-        return warped, rotate_matrix, np.matmul(warp_matrix, trans_matrix)
-    else:
-        return rotated, rotate_matrix, None
+#         # Matching shadow
+#         l, r, t, b = get_mask_bbox(mask)
+#         new_l, new_r, new_t, new_b = get_mask_bbox(warp_dst)
+#         # matching the x-axis center of 2 bboxes
+#         dx=int(l+(r-l)/2-new_l-(new_r-new_l)/2)
 
-def create_gradient_shadow_alpha_mask(shadow_mask, rd_low, rd_high, is_vertical_flip):
+#         # Flip shadow
+#         if not is_vertical_flip:
+#             # matching the bottom of 2 bboxes
+#             dy=int(b-new_b)
+#         else:
+#             warp_dst = cv2.flip(warp_dst, 0)
+#             # matching the bottom of original src with the top of dst bbox 
+#             t_after_flip = h-new_b
+#             b_after_flip = h-new_t
+#             delta = h/2000 #hard-code, make the shadow connect more with the object
+#             dy=int(b-t_after_flip-delta)
+#             # dy=int(t+(t-b)/2-t_after_flip-(t_after_flip-b_after_flip)/2)
+#         trans_matrix = get_rotate_matrix(h, w, alpha=90, beta=90, gamma=90,
+#                                          dx=dx, dy=dy, dz=200, f=200)
+#         warped = cv2.warpPerspective(warp_dst, trans_matrix, (h, w), cv2.INTER_LANCZOS4)
+        
+#         warp_matrix = np.zeros_like(rotate_matrix)
+#         warp_matrix[2,2] = 1
+#         warp_matrix[:2] = warp_mat
+#         return warped, rotate_matrix, np.matmul(warp_matrix, trans_matrix)
+#     else:
+#         return rotated, rotate_matrix, None
+
+def create_grad_img(org_img, center, radius, speed, overflow, offset, thickness = 2):
+    grad_img = np.zeros_like(org_img, dtype='uint8')
+    it = int(overflow*radius)
+    for i in range(1,radius):
+        color_weight = np.exp(-speed*i/it)
+        color = 255-int(i/it*255)
+        color*=color_weight
+        color-=offset
+
+        grad_img = cv2.circle(grad_img, center, i, (color, color, color), thickness)
+    return grad_img
+
+def create_gradient_shadow_alpha_mask(shadow_mask, rd_low, rd_high, is_vertical_flip,
+                                      speed, overflow, offset, thickness=2):
     """
     The rd_low and high determine the gradient shade of the shadow.
     Increase the value to have fader shade
@@ -141,7 +155,8 @@ def create_gradient_shadow_alpha_mask(shadow_mask, rd_low, rd_high, is_vertical_
     else:
         y_center = final_t-rd
     radius = max(shadow_mask.shape[0], shadow_mask.shape[1])
-    grad_img = create_grad_img(shadow_mask, ((final_l+final_r)//2,y_center),radius) # Hard-code here
+    grad_img = create_grad_img(shadow_mask, ((final_l+final_r)//2,y_center), radius,
+                               speed, overflow, offset, thickness) # Hard-code here
 
     # Normalize the alpha mask to keep intensity between 0 and 1
     alpha = grad_img.astype(float)/255
@@ -278,7 +293,7 @@ def order_points(pts):
     # bottom-right, and bottom-left order
     return np.array([tl, tr, br, bl], dtype="float32")
 
-def create_grad_img_ellipse(img, center, axesLength, angle, startAngle, endAngle, 
+def create_grad_img_ellipse(img, center, axesLength, angle, startAngle, endAngle,
                             thickness=2, speed=1, overflow=1.1, offset = 40):
     """
     speed: how fast the shadow fades
@@ -310,13 +325,10 @@ def create_ellipse_alpha_mask(org_mask, fixed_points, rd_low, rd_high,
     tl, tr, br, bl = order_points(fixed_points[0])
     mid_l = (tl+bl)/2
     mid_r = (tr+br)/2
-    mid_t = (tl+tr)/2
-    mid_b = (bl+br)/2
-    rd = np.random.randint(low = rd_low, high = rd_high)
-    d_lr = pointwise_distance(np.expand_dims(mid_l,0), np.expand_dims(mid_r,0))[0] + rd
-    rd = np.random.randint(low = rd_low, high = rd_high)
-    d_tb = pointwise_distance(np.expand_dims(mid_t,0), np.expand_dims(mid_b,0))[0] + rd
-    axesLength = np.sort([d_lr, d_tb])[::-1].astype('int')
+    d = np.max(fixed_points[0]-center_coordinates, axis=0)*1.5
+    d[0]+=np.random.randint(low = rd_low, high = rd_high)
+    d[1]+=np.random.randint(low = rd_low, high = rd_high)
+    axesLength = np.sort(d)[::-1].astype('int')
 
     angle = np.arctan((mid_r-mid_l)[1]/(mid_r-mid_l)[0])*180/np.pi
     startAngle = 0  
@@ -325,8 +337,8 @@ def create_ellipse_alpha_mask(org_mask, fixed_points, rd_low, rd_high,
     color = (255,255,255)
     thickness = 5
     grad_img = create_grad_img_ellipse(org_mask, center_coordinates, axesLength, 
-                                   angle, startAngle, endAngle, speed=speed, 
-                                   overflow=overflow, offset=offset)
+                                       angle, startAngle, endAngle, speed=speed, 
+                                       overflow=overflow, offset=offset)
     
     # Normalize the alpha mask to keep intensity between 0 and 1
     alpha = grad_img.astype(float)/255
