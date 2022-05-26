@@ -216,7 +216,7 @@ def cut_mask(org_mask):
     return mask, (new_l, new_t)
 
 def restore_mask(org_mask, mask, cut_info):
-    h, w = org_mask.shape[0], org_mask.shape[1]
+    h, w = mask.shape[0], mask.shape[1]
     new_l, new_t = cut_info
     if h<w:
         pad_mask = np.zeros_like(org_mask)
