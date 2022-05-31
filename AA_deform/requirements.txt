@@ -1,0 +1,3 @@
+triangle
+opencv-python
+scikit-image

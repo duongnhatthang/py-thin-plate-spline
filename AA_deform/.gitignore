@@ -1,0 +1,11 @@
+.ipynb_checkpoints/
+__pycache__/
+data/.ipynb_checkpoints/
+images/.ipynb_checkpoints/
+lib/
+utils/.ipynb_checkpoints/
+utils/__pycache__/
+data/dog/
+deformed_mesh.obj
+to_local.sh
+to_server.sh
