@@ -24,7 +24,7 @@ def get_tranformation_matrix(h, w, alpha, beta, gamma, dx, dy, dz, f):
     ONLY WORK WITH SQUARE MATRIX
     Source: http://jepsonsblog.blogspot.com/2012/11/rotation-in-3d-using-opencvs.html
     90 degrees being the "normal" position.
-    
+
     alpha: the rotation around the x axis
     beta: the rotation around the y axis
     gamma: the rotation around the z axis (basically a 2D rotation)
@@ -96,7 +96,7 @@ def matrix_padding(m):
 
 def _affine_transform(mask, fixed_points, rd):
     h, w = mask.shape[0], mask.shape[1]
-    
+
     srcTri = np.array( [[0,0], [w-1,0], [w//2, h//2]]).astype(np.float32)
     dstTri = np.array( [[0,0], [w-1,0], [w//2+rd[0], h//2+rd[1]]]).astype(np.float32)
     warp_mat = cv2.getAffineTransform(srcTri, dstTri)
@@ -114,7 +114,7 @@ def _rotate_x_axis(affined, affined_fixed_pts, rot_rd, h, w):
     mid_pts = np.expand_dims(np.vstack((mid_l, mid_r)), axis=0)
     #The angle between the legs' axis (middle line between legs) vs horizontal axis
     angle_z = np.arctan((mid_r-mid_l)[1]/(mid_r-mid_l)[0])*180/np.pi
-    
+
     # Rotate image
     rotate_matrix_x = get_tranformation_matrix(h, w, alpha=90+rot_rd, beta=90, gamma=90, dx=0, dy=0, dz=200, f=200)
     rotated_x = cv2.warpPerspective(affined, rotate_matrix_x, (h, w), cv2.INTER_LANCZOS4)
@@ -188,7 +188,7 @@ def mask_to_shadow(mask, fixed_points, rot_rd_low, rot_rd_high, is_vertical_flip
         center_coordinates = np.expand_dims(center_coordinates, axis=(0,1)).astype('float64')
         final_centers = cv2.perspectiveTransform(center_coordinates, all_matrix[:3,:3])
         dy=int(center_y-final_centers[0,0,1])
-        
+
         final_fixed_points = cv2.perspectiveTransform(fixed_points, all_matrix[:3,:3])
         new_r, new_b = np.max(final_fixed_points[0], axis=0)
         new_l, new_t = np.min(final_fixed_points[0], axis=0)
@@ -297,7 +297,7 @@ def restore_mask(org_mask, mask, cut_info):
 #     axs[1].scatter(c_dst[:, 0]*warped.shape[1], c_dst[:, 1]*warped.shape[0], marker='+', color='red')
 #     plt.show()
 
-def convert_pts(src_shape, src):    
+def convert_pts(src_shape, src):
     src = np.squeeze(src, axis=0)
     c_src = np.zeros_like(src)
     c_src[:,0] = src[:,0]/src_shape[1]
@@ -430,7 +430,7 @@ def create_ellipse_alpha_mask(org_mask, fixed_points, rd_low, rd_high,
 def match_legs_ARAP(image_rgb, mask_gray, src_pts, target_pts, DEFORM_MESH_PATH=f'./deformed_mesh.obj', TEMP_IMG_PATH=f'./temp.png'):
     """
     poses2d_raw are the source points
-    constraint_v_coords are the target points (for deformation) 
+    constraint_v_coords are the target points (for deformation)
     """
     h, w = image_rgb.shape[:2]
     cv2.imwrite(TEMP_IMG_PATH, image_rgb)
@@ -448,7 +448,7 @@ def match_legs_ARAP(image_rgb, mask_gray, src_pts, target_pts, DEFORM_MESH_PATH=
     distance = cdist(poses2d_raw, vertices)
     constraint_v_ids = np.argmin(distance, axis=1)
     poses2d = vertices[constraint_v_ids]
-    
+
     #
     vis_image = mesh.get_image()
     vis_image = cv2.cvtColor(vis_image, cv2.COLOR_GRAY2BGR)
@@ -460,7 +460,7 @@ def match_legs_ARAP(image_rgb, mask_gray, src_pts, target_pts, DEFORM_MESH_PATH=
         cv2.circle(vis_image, (x, y), radius=3, color=(0, 255, 0), thickness=2)
 
     # im_utils.imshow(vis_image)
-    
+
     #
     constraint_v_coords_normed = Mesh.normalize_vertices(constraint_v_coords, size=(w, h))
 
